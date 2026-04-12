@@ -3,7 +3,11 @@
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_status.hpp>
 #include <libtorrent/torrent_info.hpp>
+#include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/file_storage.hpp>
+#include <libtorrent/announce_entry.hpp>
+
+// ─── Construction / Destruction ──────────────────────────────────────────────
 
 Torrent::Torrent(QObject* parent) :
     QObject(parent),
@@ -15,6 +19,8 @@ Torrent::~Torrent()
 {
     // handle is owned by TorrentClient, deleted there
 }
+
+// ─── Control ─────────────────────────────────────────────────────────────────
 
 void Torrent::start()
 {
@@ -51,6 +57,8 @@ void Torrent::resume()
     }
 }
 
+// ─── Info ────────────────────────────────────────────────────────────────────
+
 QString Torrent::name() const
 {
     auto* h = static_cast<lt::torrent_handle*>(_handle);
@@ -67,6 +75,8 @@ QString Torrent::name() const
     }
     return infoHashHex().left(16) + "...";
 }
+
+// ─── Download progress ──────────────────────────────────────────────────────
 
 double Torrent::progress() const
 {
@@ -113,6 +123,85 @@ qint64 Torrent::downloadRate() const
     return 0;
 }
 
+// ─── Upload stats ────────────────────────────────────────────────────────────
+
+qint64 Torrent::uploadRate() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->status().upload_rate;
+    }
+    return 0;
+}
+
+qint64 Torrent::totalUploaded() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->status().all_time_upload;
+    }
+    return 0;
+}
+
+double Torrent::ratio() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        lt::torrent_status s = h->status();
+        if(s.all_time_download > 0) {
+            return static_cast<double>(s.all_time_upload) / static_cast<double>(s.all_time_download);
+        }
+    }
+    return 0.0;
+}
+
+// ─── Piece info ──────────────────────────────────────────────────────────────
+
+int Torrent::totalPieces() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid() && h->torrent_file()) {
+        return h->torrent_file()->num_pieces();
+    }
+    return 0;
+}
+
+int Torrent::downloadedPieces() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->status().num_pieces;
+    }
+    return 0;
+}
+
+int Torrent::pieceSize() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid() && h->torrent_file()) {
+        return h->torrent_file()->piece_length();
+    }
+    return 0;
+}
+
+// ─── ETA ─────────────────────────────────────────────────────────────────────
+
+int Torrent::eta() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(!h || !h->is_valid()) { return -1; }
+
+    lt::torrent_status s = h->status();
+    if(s.download_rate <= 0) { return -1; }
+
+    qint64 remaining = s.total - s.total_done;
+    if(remaining <= 0) { return 0; }
+
+    return static_cast<int>(remaining / s.download_rate);
+}
+
+// ─── File management ─────────────────────────────────────────────────────────
+
 int Torrent::fileCount() const
 {
     auto* h = static_cast<lt::torrent_handle*>(_handle);
@@ -144,6 +233,18 @@ QStringList Torrent::fileNames() const
     return names;
 }
 
+qint64 Torrent::fileSize(int index) const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid() && h->torrent_file()) {
+        const lt::file_storage& fs = h->torrent_file()->files();
+        if(index >= 0 && index < fs.num_files()) {
+            return fs.file_size(lt::file_index_t{index});
+        }
+    }
+    return 0;
+}
+
 void Torrent::setFilePriority(int index, int priority)
 {
     auto* h = static_cast<lt::torrent_handle*>(_handle);
@@ -172,6 +273,8 @@ int Torrent::findFileByName(const QString& partialName) const
     return -1;
 }
 
+// ─── Paths ───────────────────────────────────────────────────────────────────
+
 QString Torrent::outputPath() const
 {
     auto* h = static_cast<lt::torrent_handle*>(_handle);
@@ -181,6 +284,211 @@ QString Torrent::outputPath() const
     }
     return QString();
 }
+
+void Torrent::moveStorage(const QString& newPath)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->move_storage(newPath.toStdString());
+        logText(LVL_INFO, QString("Moving storage to: %1").arg(newPath));
+    }
+}
+
+// ─── Per-torrent options ─────────────────────────────────────────────────────
+
+bool Torrent::isSequentialDownload() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return static_cast<bool>(h->flags() & lt::torrent_flags::sequential_download);
+    }
+    return false;
+}
+
+void Torrent::setSequentialDownload(bool enabled)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        if(enabled) {
+            h->set_flags(lt::torrent_flags::sequential_download);
+        }
+        else {
+            h->unset_flags(lt::torrent_flags::sequential_download);
+        }
+    }
+}
+
+bool Torrent::isAutoManaged() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return static_cast<bool>(h->flags() & lt::torrent_flags::auto_managed);
+    }
+    return false;
+}
+
+void Torrent::setAutoManaged(bool enabled)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        if(enabled) {
+            h->set_flags(lt::torrent_flags::auto_managed);
+        }
+        else {
+            h->unset_flags(lt::torrent_flags::auto_managed);
+        }
+    }
+}
+
+int Torrent::downloadLimit() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->download_limit();
+    }
+    return 0;
+}
+
+void Torrent::setDownloadLimit(int bytesPerSecond)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->set_download_limit(bytesPerSecond);
+    }
+}
+
+int Torrent::uploadLimit() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->upload_limit();
+    }
+    return 0;
+}
+
+void Torrent::setUploadLimit(int bytesPerSecond)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->set_upload_limit(bytesPerSecond);
+    }
+}
+
+int Torrent::maxConnections() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->max_connections();
+    }
+    return 0;
+}
+
+void Torrent::setMaxConnections(int value)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->set_max_connections(value);
+    }
+}
+
+int Torrent::maxUploads() const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        return h->max_uploads();
+    }
+    return 0;
+}
+
+void Torrent::setMaxUploads(int value)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->set_max_uploads(value);
+    }
+}
+
+// ─── Seed ratio ──────────────────────────────────────────────────────────────
+
+void Torrent::setSeedRatioLimit(double ratio)
+{
+    _seedRatioLimit = ratio;
+}
+
+void Torrent::checkSeedRatio()
+{
+    if(_seedRatioLimit <= 0.0) { return; }
+    if(_state != Seeding) { return; }
+
+    double currentRatio = ratio();
+    if(currentRatio >= _seedRatioLimit) {
+        logText(LVL_INFO, QString("Seed ratio %.2f reached limit %.2f, pausing: %1")
+            .arg(currentRatio).arg(_seedRatioLimit).arg(name()));
+        pause();
+    }
+}
+
+// ─── Tracker management ─────────────────────────────────────────────────────
+
+QStringList Torrent::trackers() const
+{
+    QStringList result;
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        std::vector<lt::announce_entry> entries = h->trackers();
+        for(const auto& entry : entries) {
+            result.append(QString::fromStdString(entry.url));
+        }
+    }
+    return result;
+}
+
+void Torrent::addTracker(const QString& url)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        lt::announce_entry entry(url.toStdString());
+        h->add_tracker(entry);
+        logText(LVL_DEBUG, QString("Added tracker: %1").arg(url));
+    }
+}
+
+void Torrent::removeTracker(const QString& url)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(!h || !h->is_valid()) { return; }
+
+    std::vector<lt::announce_entry> entries = h->trackers();
+    std::string target = url.toStdString();
+    std::vector<lt::announce_entry> filtered;
+    for(const auto& entry : entries) {
+        if(entry.url != target) {
+            filtered.push_back(entry);
+        }
+    }
+    h->replace_trackers(filtered);
+    logText(LVL_DEBUG, QString("Removed tracker: %1").arg(url));
+}
+
+void Torrent::forceReannounce()
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->force_reannounce();
+    }
+}
+
+// ─── Resume data ─────────────────────────────────────────────────────────────
+
+void Torrent::saveResumeData()
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->save_resume_data(lt::torrent_handle::save_info_dict);
+    }
+}
+
+// ─── Internal ────────────────────────────────────────────────────────────────
 
 void Torrent::setHandle(void* handle)
 {
