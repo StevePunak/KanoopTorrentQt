@@ -52,13 +52,6 @@ jobs:
           repository: StevePunak/KanoopProtocolQt
           path: deps/KanoopProtocolQt
 
-      - name: Build KanoopCommonQt
-        run: |
-          cmake -S deps/KanoopCommonQt -B deps/KanoopCommonQt/build -G Ninja \
-            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
-          cmake --build deps/KanoopCommonQt/build --parallel
-          sudo cmake --install deps/KanoopCommonQt/build
-
       - name: Configure CMake
         run: |
           cmake -S . -B build -G Ninja \
