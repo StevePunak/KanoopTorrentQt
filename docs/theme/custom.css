@@ -1,0 +1,29 @@
+/* KanoopTorrentQt custom Doxygen overrides */
+
+/* Accent color — blue-purple for torrent theme */
+html {
+    --primary-color: #5b6abf;
+    --primary-dark-color: #3f4a96;
+    --primary-light-color: #8490d9;
+}
+
+/* Slightly rounder corners */
+div.contents, div.textblock {
+    border-radius: 8px;
+}
+
+/* Nicer code blocks */
+div.fragment {
+    border-radius: 6px;
+    border-left: 3px solid var(--primary-color);
+}
+
+/* Class member tables */
+table.memberdecls {
+    border-spacing: 0 2px;
+}
+
+/* Sidebar tree — tighter spacing */
+.sm-dox a {
+    padding: 0 12px;
+}

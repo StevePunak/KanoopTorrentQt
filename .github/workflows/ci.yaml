@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  QT_VERSION: "6.10.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            cmake ninja-build build-essential doxygen graphviz \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libboost-system-dev libssl-dev
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+
+      - name: Install libtorrent-rasterbar
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libtorrent-rasterbar-dev
+
+      - name: Checkout KanoopCommonQt
+        uses: actions/checkout@v4
+        with:
+          repository: StevePunak/KanoopCommonQt
+          path: KanoopCommonQt
+
+      - name: Checkout KanoopProtocolQt
+        uses: actions/checkout@v4
+        with:
+          repository: StevePunak/KanoopProtocolQt
+          path: KanoopProtocolQt
+
+      - name: Build KanoopCommonQt
+        run: |
+          cmake -S KanoopCommonQt -B KanoopCommonQt/build -G Ninja \
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          cmake --build KanoopCommonQt/build --parallel
+
+      - name: Build KanoopProtocolQt
+        run: |
+          cmake -S KanoopProtocolQt -B KanoopProtocolQt/build -G Ninja \
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+            -DKanoopCommonQt_DIR="${{ github.workspace }}/KanoopCommonQt/build"
+          cmake --build KanoopProtocolQt/build --parallel
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+            -DKanoopCommonQt_DIR="${{ github.workspace }}/KanoopCommonQt/build" \
+            -DKanoopProtocolQt_DIR="${{ github.workspace }}/KanoopProtocolQt/build"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Generate Doxygen documentation
+        run: cmake --build build --target doc_KanoopTorrentQt
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/html
+
+  deploy-docs:
+    if: github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

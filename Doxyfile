@@ -1,0 +1,86 @@
+# Doxyfile for KanoopTorrentQt
+# Run: doxygen Doxyfile  (from the KanoopTorrentQt directory)
+# Output: docs/html/index.html
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+PROJECT_NAME           = KanoopTorrentQt
+PROJECT_NUMBER         = 0.1.0
+PROJECT_BRIEF          = "Qt6 wrapper library for libtorrent-rasterbar"
+OUTPUT_DIRECTORY       = docs
+
+#---------------------------------------------------------------------------
+# Input
+#---------------------------------------------------------------------------
+INPUT                  = include/ docs/mainpage.md
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.md
+EXCLUDE_PATTERNS       = */moc_* */ui_*
+USE_MDFILE_AS_MAINPAGE = docs/mainpage.md
+
+#---------------------------------------------------------------------------
+# Extraction
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+
+#---------------------------------------------------------------------------
+# HTML output — doxygen-awesome theme
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+FULL_SIDEBAR           = NO
+HTML_COLORSTYLE        = LIGHT
+HTML_HEADER            = docs/theme/header.html
+HTML_EXTRA_STYLESHEET  = docs/theme/doxygen-awesome.css \
+                         docs/theme/doxygen-awesome-sidebar-only.css \
+                         docs/theme/doxygen-awesome-sidebar-only-darkmode-toggle.css \
+                         docs/theme/custom.css
+HTML_EXTRA_FILES       = docs/theme/doxygen-awesome-darkmode-toggle.js \
+                         docs/theme/doxygen-awesome-fragment-copy-button.js \
+                         docs/theme/doxygen-awesome-interactive-toc.js \
+                         docs/theme/doxygen-awesome-paragraph-link.js \
+                         docs/theme/doxygen-awesome-tabs.js
+HTML_COLORSTYLE_HUE    = 230
+HTML_COLORSTYLE_SAT    = 120
+HTML_COLORSTYLE_GAMMA  = 100
+HTML_DYNAMIC_SECTIONS  = YES
+
+#---------------------------------------------------------------------------
+# Build settings
+#---------------------------------------------------------------------------
+JAVADOC_AUTOBRIEF      = YES
+TAB_SIZE               = 4
+BUILTIN_STL_SUPPORT    = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+
+#---------------------------------------------------------------------------
+# Warnings
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = YES

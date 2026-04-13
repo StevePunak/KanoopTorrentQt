@@ -1,4 +1,5 @@
 #include <Kanoop/torrent/torrent.h>
+#include <Kanoop/torrent/torrentclient.h>
 
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_status.hpp>
@@ -6,6 +7,7 @@
 #include <libtorrent/torrent_flags.hpp>
 #include <libtorrent/file_storage.hpp>
 #include <libtorrent/announce_entry.hpp>
+#include <libtorrent/peer_info.hpp>
 
 // ─── Construction / Destruction ──────────────────────────────────────────────
 
@@ -478,6 +480,96 @@ void Torrent::forceReannounce()
     }
 }
 
+// ─── Peer management ────────────────────────────────────────────────────────
+
+QList<PeerInfo> Torrent::peers() const
+{
+    QList<PeerInfo> result;
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(!h || !h->is_valid()) { return result; }
+
+    std::vector<lt::peer_info> peers;
+    h->get_peer_info(peers);
+
+    for(const lt::peer_info& p : peers) {
+        PeerInfo info;
+        info.setAddress(QHostAddress(QString::fromStdString(p.ip.address().to_string())));
+        info.setPort(p.ip.port());
+        info.setClient(QString::fromStdString(p.client));
+        info.setDownloadRate(p.down_speed);
+        info.setUploadRate(p.up_speed);
+        info.setTotalDownload(p.total_download);
+        info.setTotalUpload(p.total_upload);
+        info.setProgress(static_cast<double>(p.progress));
+
+        PeerInfo::Flags flags = PeerInfo::NoFlags;
+        if(p.flags & lt::peer_info::interesting)   { flags |= PeerInfo::Interesting; }
+        if(p.flags & lt::peer_info::choked)        { flags |= PeerInfo::Choked; }
+        if(p.flags & lt::peer_info::remote_choked) { flags |= PeerInfo::RemoteChoked; }
+        if(p.flags & lt::peer_info::seed)          { flags |= PeerInfo::Seed; }
+        if(p.flags & lt::peer_info::rc4_encrypted) { flags |= PeerInfo::Encrypted; }
+        if(p.flags & lt::peer_info::incoming)       { flags |= PeerInfo::Incoming; }
+        if(p.flags & lt::peer_info::snubbed)       { flags |= PeerInfo::Snubbed; }
+        if(p.flags & lt::peer_info::upload_only)   { flags |= PeerInfo::UploadOnly; }
+        info.setFlags(flags);
+
+        result.append(info);
+    }
+
+    return result;
+}
+
+void Torrent::banPeer(const QHostAddress& address)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(!h || !h->is_valid()) { return; }
+
+    logText(LVL_INFO, QString("Banning peer: %1").arg(address.toString()));
+
+    // Parent is always TorrentClient — delegate to its IP filter API
+    auto* client = qobject_cast<TorrentClient*>(parent());
+    if(client) {
+        client->addIpFilter(address, address);
+    }
+}
+
+// ─── Advanced file ops ──────────────────────────────────────────────────────
+
+int Torrent::filePriority(int index) const
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        auto priorities = h->get_file_priorities();
+        if(index >= 0 && index < static_cast<int>(priorities.size())) {
+            return static_cast<int>(priorities[static_cast<std::size_t>(index)]);
+        }
+    }
+    return -1;
+}
+
+QList<qint64> Torrent::fileProgress() const
+{
+    QList<qint64> result;
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(!h || !h->is_valid() || !h->torrent_file()) { return result; }
+
+    std::vector<std::int64_t> progress;
+    h->file_progress(progress);
+    for(std::int64_t bytes : progress) {
+        result.append(static_cast<qint64>(bytes));
+    }
+    return result;
+}
+
+void Torrent::renameFile(int index, const QString& newName)
+{
+    auto* h = static_cast<lt::torrent_handle*>(_handle);
+    if(h && h->is_valid()) {
+        h->rename_file(lt::file_index_t{index}, newName.toStdString());
+        logText(LVL_DEBUG, QString("Renaming file %1 → %2").arg(index).arg(newName));
+    }
+}
+
 // ─── Resume data ─────────────────────────────────────────────────────────────
 
 void Torrent::saveResumeData()
@@ -536,16 +628,18 @@ void Torrent::updateFromStatus()
 
     setState(newState);
 
-    // Emit progress
-    if(_state == Downloading) {
+    // Emit progress for all active states (not just Downloading)
+    if(_state != Idle && _state != Paused && _state != Error) {
         double prog = static_cast<double>(status.progress);
-        logText(LVL_DEBUG, QString("%1: %2% ↓%3/s peers=%4")
-            .arg(name())
-            .arg(static_cast<int>(prog * 100))
-            .arg(status.download_rate > 0
-                ? QString::number(status.download_rate / 1024) + "KB"
-                : "0")
-            .arg(status.num_peers));
+        if(_state == Downloading) {
+            logText(LVL_DEBUG, QString("%1: %2% ↓%3/s peers=%4")
+                .arg(name())
+                .arg(static_cast<int>(prog * 100))
+                .arg(status.download_rate > 0
+                    ? QString::number(status.download_rate / 1024) + "KB"
+                    : "0")
+                .arg(status.num_peers));
+        }
         emit progressUpdated(prog);
     }
 

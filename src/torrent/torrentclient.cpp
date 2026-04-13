@@ -13,9 +13,11 @@
 #include <libtorrent/settings_pack.hpp>
 #include <libtorrent/read_resume_data.hpp>
 #include <libtorrent/write_resume_data.hpp>
+#include <libtorrent/ip_filter.hpp>
 
 #include <QDir>
 #include <QFile>
+#include <QTextStream>
 #include <QTimer>
 
 #define LT_SESSION static_cast<lt::session*>(_session)
@@ -386,6 +388,85 @@ void TorrentClient::loadResumeData()
     logText(LVL_INFO, QString("Loaded %1 resume file(s)").arg(files.size()));
 }
 
+// ─── IP filtering ────────────────────────────────────────────────────────────
+
+void TorrentClient::addIpFilter(const QHostAddress& first, const QHostAddress& last)
+{
+    lt::ip_filter filter = LT_SESSION->get_ip_filter();
+    boost::system::error_code ec;
+
+    auto addr1 = boost::asio::ip::make_address(first.toString().toStdString(), ec);
+    if(ec) { return; }
+    auto addr2 = boost::asio::ip::make_address(last.toString().toStdString(), ec);
+    if(ec) { return; }
+
+    filter.add_rule(addr1, addr2, lt::ip_filter::blocked);
+    LT_SESSION->set_ip_filter(filter);
+    logText(LVL_INFO, QString("IP filter: blocked %1 — %2").arg(first.toString(), last.toString()));
+}
+
+void TorrentClient::removeIpFilter(const QHostAddress& first, const QHostAddress& last)
+{
+    lt::ip_filter filter = LT_SESSION->get_ip_filter();
+    boost::system::error_code ec;
+
+    auto addr1 = boost::asio::ip::make_address(first.toString().toStdString(), ec);
+    if(ec) { return; }
+    auto addr2 = boost::asio::ip::make_address(last.toString().toStdString(), ec);
+    if(ec) { return; }
+
+    filter.add_rule(addr1, addr2, 0); // 0 = allowed
+    LT_SESSION->set_ip_filter(filter);
+}
+
+int TorrentClient::loadBlocklist(const QString& filePath)
+{
+    QFile file(filePath);
+    if(!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        logText(LVL_WARNING, QString("Cannot open blocklist: %1").arg(filePath));
+        return -1;
+    }
+
+    lt::ip_filter filter = LT_SESSION->get_ip_filter();
+    int count = 0;
+
+    QTextStream stream(&file);
+    while(!stream.atEnd()) {
+        QString line = stream.readLine().trimmed();
+        if(line.isEmpty() || line.startsWith('#')) { continue; }
+
+        // P2P format: "description:startIP-endIP"
+        int colonPos = line.lastIndexOf(':');
+        if(colonPos < 0) { continue; }
+
+        QString range = line.mid(colonPos + 1);
+        int dashPos = range.indexOf('-');
+        if(dashPos < 0) { continue; }
+
+        QString startStr = range.left(dashPos).trimmed();
+        QString endStr = range.mid(dashPos + 1).trimmed();
+
+        boost::system::error_code ec;
+        auto addr1 = boost::asio::ip::make_address(startStr.toStdString(), ec);
+        if(ec) { continue; }
+        auto addr2 = boost::asio::ip::make_address(endStr.toStdString(), ec);
+        if(ec) { continue; }
+
+        filter.add_rule(addr1, addr2, lt::ip_filter::blocked);
+        count++;
+    }
+
+    LT_SESSION->set_ip_filter(filter);
+    logText(LVL_INFO, QString("Loaded %1 IP filter ranges from %2").arg(count).arg(filePath));
+    return count;
+}
+
+void TorrentClient::clearIpFilter()
+{
+    LT_SESSION->set_ip_filter(lt::ip_filter());
+    logText(LVL_INFO, "IP filter cleared");
+}
+
 // ─── Add torrents ────────────────────────────────────────────────────────────
 
 Torrent* TorrentClient::addTorrent(const MagnetLink& magnetLink, const QString& downloadDirectory)
@@ -687,6 +768,30 @@ void TorrentClient::processAlerts()
                 QString msg = QString::fromStdString(srf->message());
                 logText(LVL_WARNING, QString("Resume data save failed: %1 — %2").arg(t->name(), msg));
                 emit resumeDataFailed(t->infoHash(), msg);
+            }
+        }
+
+        // --- File renamed ---
+        else if(auto* fra = lt::alert_cast<lt::file_renamed_alert>(a)) {
+            lt::torrent_handle h = fra->handle;
+            Torrent* t = findTorrentByHandle(&h);
+            if(t) {
+                int idx = static_cast<int>(fra->index);
+                QString newName = QString::fromStdString(std::string(fra->new_name()));
+                logText(LVL_DEBUG, QString("File renamed [%1]: %2").arg(idx).arg(newName));
+                emit t->fileRenamed(idx, newName);
+            }
+        }
+
+        // --- File rename failed ---
+        else if(auto* frf = lt::alert_cast<lt::file_rename_failed_alert>(a)) {
+            lt::torrent_handle h = frf->handle;
+            Torrent* t = findTorrentByHandle(&h);
+            if(t) {
+                int idx = static_cast<int>(frf->index);
+                QString msg = QString::fromStdString(frf->error.message());
+                logText(LVL_WARNING, QString("File rename failed [%1]: %2").arg(idx).arg(msg));
+                emit t->fileRenameError(idx, msg);
             }
         }
     }
