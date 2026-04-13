@@ -37,17 +37,43 @@ target_include_directories(${PROJ} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 find_package(Qt6 REQUIRED COMPONENTS Core Network)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBTORRENT REQUIRED IMPORTED_TARGET libtorrent-rasterbar)
+
+# Link Qt and libtorrent (always required)
 target_link_libraries(${PROJ} PRIVATE
     Qt6::Core
     Qt6::Network
-    KanoopCommonQt
-    KanoopProtocolQt
     PkgConfig::LIBTORRENT
 )
 
+# KanoopCommonQt and KanoopProtocolQt — resolve as targets (superproject)
+# or fall back to include-path-only (standalone CI build)
+if(TARGET KanoopCommonQt)
+    target_link_libraries(${PROJ} PRIVATE KanoopCommonQt)
+else()
+    find_library(KANOOP_COMMON_LIB KanoopCommonQt)
+    if(KANOOP_COMMON_LIB)
+        target_link_libraries(${PROJ} PRIVATE ${KANOOP_COMMON_LIB})
+    endif()
+endif()
+
+if(TARGET KanoopProtocolQt)
+    target_link_libraries(${PROJ} PRIVATE KanoopProtocolQt)
+else()
+    find_library(KANOOP_PROTOCOL_LIB KanoopProtocolQt)
+    if(KANOOP_PROTOCOL_LIB)
+        target_link_libraries(${PROJ} PRIVATE ${KANOOP_PROTOCOL_LIB})
+    endif()
+endif()
+
+# Resolve include directories — prefer sibling dirs (superproject), fall back to env hints
 get_directory_property(PARENT_DIR PARENT_DIRECTORY)
-target_include_directories(${PROJ} PRIVATE ${PARENT_DIR}/KanoopCommonQt/include)
-target_include_directories(${PROJ} PRIVATE ${PARENT_DIR}/KanoopProtocolQt/include)
+foreach(DEP KanoopCommonQt KanoopProtocolQt)
+    if(EXISTS "${PARENT_DIR}/${DEP}/include")
+        target_include_directories(${PROJ} PRIVATE ${PARENT_DIR}/${DEP}/include)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${DEP}/include")
+        target_include_directories(${PROJ} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../${DEP}/include)
+    endif()
+endforeach()
 
 add_compile_definitions(KANOOP_TORRENT_LIBRARY)
 add_compile_definitions(QT_DEPRECATED_WARNINGS)

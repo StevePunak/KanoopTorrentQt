@@ -32,51 +32,37 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             cmake ninja-build build-essential doxygen graphviz \
             libgl1-mesa-dev libglu1-mesa-dev \
-            libboost-system-dev libssl-dev
+            libboost-system-dev libssl-dev \
+            libtorrent-rasterbar-dev
 
       - name: Install Qt6
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebsockets qtserialbus
-
-      - name: Install libtorrent-rasterbar and Qt6 MQTT
-        run: |
-          sudo apt-get install -y --no-install-recommends \
-            libtorrent-rasterbar-dev \
-            qt6-mqtt-dev
 
       - name: Checkout KanoopCommonQt
         uses: actions/checkout@v4
         with:
           repository: StevePunak/KanoopCommonQt
-          path: KanoopCommonQt
+          path: ../KanoopCommonQt
 
       - name: Checkout KanoopProtocolQt
         uses: actions/checkout@v4
         with:
           repository: StevePunak/KanoopProtocolQt
-          path: KanoopProtocolQt
+          path: ../KanoopProtocolQt
 
       - name: Build KanoopCommonQt
         run: |
-          cmake -S KanoopCommonQt -B KanoopCommonQt/build -G Ninja \
+          cmake -S ../KanoopCommonQt -B ../KanoopCommonQt/build -G Ninja \
             -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
-          cmake --build KanoopCommonQt/build --parallel
-
-      - name: Build KanoopProtocolQt
-        run: |
-          cmake -S KanoopProtocolQt -B KanoopProtocolQt/build -G Ninja \
-            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-            -DKanoopCommonQt_DIR="${{ github.workspace }}/KanoopCommonQt/build"
-          cmake --build KanoopProtocolQt/build --parallel
+          cmake --build ../KanoopCommonQt/build --parallel
+          sudo cmake --install ../KanoopCommonQt/build
 
       - name: Configure CMake
         run: |
           cmake -S . -B build -G Ninja \
-            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-            -DKanoopCommonQt_DIR="${{ github.workspace }}/KanoopCommonQt/build" \
-            -DKanoopProtocolQt_DIR="${{ github.workspace }}/KanoopProtocolQt/build"
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
       - name: Build
         run: cmake --build build --parallel
