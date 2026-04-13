@@ -44,25 +44,26 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: StevePunak/KanoopCommonQt
-          path: ../KanoopCommonQt
+          path: deps/KanoopCommonQt
 
       - name: Checkout KanoopProtocolQt
         uses: actions/checkout@v4
         with:
           repository: StevePunak/KanoopProtocolQt
-          path: ../KanoopProtocolQt
+          path: deps/KanoopProtocolQt
 
       - name: Build KanoopCommonQt
         run: |
-          cmake -S ../KanoopCommonQt -B ../KanoopCommonQt/build -G Ninja \
+          cmake -S deps/KanoopCommonQt -B deps/KanoopCommonQt/build -G Ninja \
             -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
-          cmake --build ../KanoopCommonQt/build --parallel
-          sudo cmake --install ../KanoopCommonQt/build
+          cmake --build deps/KanoopCommonQt/build --parallel
+          sudo cmake --install deps/KanoopCommonQt/build
 
       - name: Configure CMake
         run: |
           cmake -S . -B build -G Ninja \
-            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+            -DKANOOP_DEPS_DIR="${{ github.workspace }}/deps"
 
       - name: Build
         run: cmake --build build --parallel

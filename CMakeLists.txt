@@ -65,13 +65,15 @@ else()
     endif()
 endif()
 
-# Resolve include directories — prefer sibling dirs (superproject), fall back to env hints
+# Resolve include directories — check superproject sibling, source sibling, and KANOOP_DEPS_DIR
 get_directory_property(PARENT_DIR PARENT_DIRECTORY)
 foreach(DEP KanoopCommonQt KanoopProtocolQt)
     if(EXISTS "${PARENT_DIR}/${DEP}/include")
         target_include_directories(${PROJ} PRIVATE ${PARENT_DIR}/${DEP}/include)
     elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${DEP}/include")
         target_include_directories(${PROJ} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../${DEP}/include)
+    elseif(KANOOP_DEPS_DIR AND EXISTS "${KANOOP_DEPS_DIR}/${DEP}/include")
+        target_include_directories(${PROJ} PRIVATE ${KANOOP_DEPS_DIR}/${DEP}/include)
     endif()
 endforeach()
 
