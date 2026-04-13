@@ -35,8 +35,32 @@ TorrentClient::TorrentClient(QObject* parent) :
         lt::alert_category::storage | lt::alert_category::peer |
         lt::alert_category::tracker | lt::alert_category::dht |
         lt::alert_category::port_mapping | lt::alert_category::stats);
+
+    // Protocol features
     pack.set_bool(lt::settings_pack::enable_dht, true);
     pack.set_bool(lt::settings_pack::enable_lsd, true);
+    pack.set_bool(lt::settings_pack::enable_upnp, true);
+    pack.set_bool(lt::settings_pack::enable_natpmp, true);
+
+    // DHT bootstrap nodes — critical for fast peer discovery
+    pack.set_str(lt::settings_pack::dht_bootstrap_nodes,
+        "dht.libtorrent.org:25401,"
+        "dht.transmissionbt.com:6881,"
+        "router.bittorrent.com:6881,"
+        "router.utorrent.com:6881");
+
+    // Announce to all trackers/tiers simultaneously for faster peer discovery
+    pack.set_bool(lt::settings_pack::announce_to_all_trackers, true);
+    pack.set_bool(lt::settings_pack::announce_to_all_tiers, true);
+
+    // Connection speed — how many outgoing connections per second
+    pack.set_int(lt::settings_pack::connection_speed, 100);
+
+    // Encryption — prefer encrypted, allow plaintext
+    pack.set_int(lt::settings_pack::out_enc_policy, lt::settings_pack::pe_enabled);
+    pack.set_int(lt::settings_pack::in_enc_policy, lt::settings_pack::pe_enabled);
+    pack.set_int(lt::settings_pack::allowed_enc_level, lt::settings_pack::pe_rc4);
+    pack.set_bool(lt::settings_pack::prefer_rc4, true);
 
     _session = new lt::session(std::move(pack));
 

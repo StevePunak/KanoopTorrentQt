@@ -38,12 +38,13 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtmqtt qtwebsockets
+          modules: qtwebsockets qtserialbus
 
-      - name: Install libtorrent-rasterbar
+      - name: Install libtorrent-rasterbar and Qt6 MQTT
         run: |
           sudo apt-get install -y --no-install-recommends \
-            libtorrent-rasterbar-dev
+            libtorrent-rasterbar-dev \
+            qt6-mqtt-dev
 
       - name: Checkout KanoopCommonQt
         uses: actions/checkout@v4
